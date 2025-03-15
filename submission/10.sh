@@ -1,60 +1,13 @@
 #!/bin/bash
 
-# Advanced Bitcoin Transaction Mastery: Capstone Challenge
+# Import helper functions
+source submission/functions.sh
+
+# Week Two Exercise: Advanced Bitcoin Transaction
 # This script combines concepts from previous exercises into a comprehensive challenge
 
 # Ensure script fails fast on errors
 set -e
-
-# ========================================================================
-# HELPER FUNCTIONS (PROVIDED - you don't need to modify these)
-# ========================================================================
-
-# Helper function to format JSON output
-format_json() {
-  # This uses jq if available, otherwise falls back to a simple echo
-  if command -v jq &> /dev/null; then
-    echo "$1" | jq .
-  else
-    echo "$1"
-  fi
-}
-
-# Enhanced check_cmd that verifies both command success and non-empty variables
-check_cmd() {
-  local exit_code=$?
-  local cmd_name=$1
-  local var_name=$2
-  local var_value=$3
-
-  if [ $exit_code -ne 0 ]; then
-    echo "ERROR: $cmd_name command failed!"
-    exit 1
-  fi
-
-  # If a variable name and value are provided, check if it's empty
-  if [ ! -z "$var_name" ] && [ ! -z "$var_value" ]; then
-    if [ -z "$var_value" ]; then
-      echo "ERROR: $var_name is empty! Make sure your solution populates this variable."
-      exit 1
-    fi
-  fi
-}
-
-# Helper to trim whitespace
-trim() {
-  local var="$*"
-  # Remove leading whitespace
-  var="${var#"${var%%[![:space:]]*}"}"
-  # Remove trailing whitespace
-  var="${var%"${var##*[![:space:]]}"}"
-  printf '%s' "$var"
-}
-
-# Set up RPC connection parameters (modify these to match your setup)
-rpcuser="theo"
-rpcpassword="theophilusisah"
-rpcport="18443"
 
 # ======================================================================
 # SETUP - These transactions are provided for the challenges
@@ -81,6 +34,11 @@ SECONDARY_TX="0200000000010182aabd8115c43e5b37a1b0c77a409b229896a2ffd255098c8056
 # This is a testnet private key - NEVER use this in production!
 TEST_PRIVATE_KEY="cVpPVruEDdmutPzisxssTtJhZijbZq4zwiFhCbvtJBRPPiaDiMWK"
 TEST_ADDRESS="mz3SbJEHKQGYJFCFXUHJYPZx1rNJ6zNdkn"
+
+# Set up RPC connection parameters (modify these to match your setup)
+rpcuser="btrust"
+rpcpassword="builder"
+rpcport="18443"
 
 # =========================================================================
 # CHALLENGE 1: Transaction Decoding - Identify transaction components
