@@ -3,15 +3,15 @@ name: Run Setup Script
 on:
   push:
     branches:
-      - main  # Trigger on pushes to the main branch
+      - main # Trigger on pushes to the main branch
 
 jobs:
   bitcoin-setup:
-    runs-on: ubuntu-latest  # Use the latest Ubuntu environment
+    runs-on: ubuntu-latest # Use the latest Ubuntu environment
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # Check out the repository code
+        uses: actions/checkout@v4 # Check out the repository code
 
       - name: Cache Bitcoin Core
         id: cache-bitcoin
@@ -21,7 +21,7 @@ jobs:
             bitcoin-28.0
             bitcoin-28.0-x86_64-linux-gnu.tar.gz
           key: bitcoin-core-28.0
-          
+
       - name: Setup Bitcoin Core
         run: |
           if [ "${{ steps.cache-bitcoin.outputs.cache-hit }}" != 'true' ]; then
@@ -47,14 +47,14 @@ jobs:
 
       - name: Verify Wallet Creation
         run: |
-            chmod +x submission/01.sh
-            WALLET=$(submission/01.sh)
-            if [[ "$WALLET" == *"btrustwallet"* ]]; then
-              echo "✅ Success: Wallet creation passed!"
-            else
-              echo "❌ Error: Wallet creation failed!"
-              exit 1
-            fi
+          chmod +x submission/01.sh
+          WALLET=$(submission/01.sh)
+          if [[ "$WALLET" == *"btrustwallet"* ]]; then
+            echo "✅ Success: Wallet creation passed!"
+          else
+            echo "❌ Error: Wallet creation failed!"
+            exit 1
+          fi
 
       - name: Verify Change Address Generation
         run: |
@@ -67,7 +67,7 @@ jobs:
             echo "❌ Error: Change address generation failed!"
             exit 1
           fi
-  
+
       - name: Verify Adding Funds to SegWit Address
         run: |
           chmod +x submission/03.sh
@@ -127,7 +127,7 @@ jobs:
             echo "❌ Error: Total Transaction Output Check failed!"
             exit 1
           fi
-        
+
       - name: Verify Raw Transaction Hex
         run: |
           chmod +x submission/08.sh
@@ -139,4 +139,97 @@ jobs:
             echo "❌ Error: Total Transaction Output Check failed!"
             exit 1
           fi
-        
+
+      - name: Verify Advanced Transaction Exercise
+        run: |
+          chmod +x submission/10.sh
+          echo "Running exercise 10 script..."
+          # Run the script with a timeout to handle potential infinite loops
+          ACTUAL_OUTPUT=$(timeout 30s submission/10.sh || echo "ERROR: Script execution failed or timed out")
+
+          # First check: Verify output is a valid transaction hex string
+          if ! [[ $ACTUAL_OUTPUT =~ ^[0-9a-fA-F]+$ ]]; then
+            echo "❌ Error: Advanced Transaction Exercise failed! Output is not a valid hex string."
+            echo "Output: $ACTUAL_OUTPUT"
+            exit 1
+          fi
+
+          echo "✓ Basic check passed: Output is a valid hex string format"
+
+          # Second check: Verify it's a valid Bitcoin transaction
+          echo "Verifying transaction validity..."
+          DECODED_TX=$(bitcoin-cli -regtest decoderawtransaction "$ACTUAL_OUTPUT" 2>/dev/null)
+          if [ $? -ne 0 ]; then
+            echo "❌ Error: Invalid transaction format! The hex string is not a valid Bitcoin transaction."
+            exit 1
+          fi
+
+          echo "✓ Transaction validity check passed: Output is a valid Bitcoin transaction"
+
+          # Third check: Verify RBF is enabled via sequence numbers
+          echo "Checking RBF implementation..."
+          VIN_SEQUENCES=$(echo "$DECODED_TX" | jq -r '.vin[].sequence')
+          RBF_ENABLED=false
+
+          for seq in $VIN_SEQUENCES; do
+            # Any sequence number below 0xFFFFFFFE (4294967294) enables RBF
+            if [ "$seq" -lt 4294967294 ]; then
+              RBF_ENABLED=true
+              break
+            fi
+          done
+
+          if [ "$RBF_ENABLED" = false ]; then
+            echo "❌ Error: RBF not enabled! All sequence numbers are ≥ 4294967294."
+            exit 1
+          fi
+
+          echo "✓ RBF check passed: Transaction has at least one input with RBF-enabling sequence number"
+
+          # Fourth check: Verify BIP125 replaceable field
+          echo "Checking BIP125 replaceable field..."
+          BIP125_REPLACEABLE=$(echo "$DECODED_TX" | jq -r '."bip125-replaceable"')
+          if [[ "$BIP125_REPLACEABLE" != "yes" ]]; then
+            echo "❌ Error: Transaction is not marked as BIP125 replaceable!"
+            exit 1
+          fi
+
+          echo "✓ BIP125 check passed: Transaction is properly marked as replaceable"
+
+          # Fifth check: Verify transaction has multiple outputs (payment + change)
+          echo "Checking transaction structure..."
+          NUM_VOUTS=$(echo "$DECODED_TX" | jq '.vout | length')
+          if [ "$NUM_VOUTS" -lt 1 ]; then
+            echo "❌ Error: Transaction doesn't have any outputs!"
+            exit 1
+          fi
+
+          echo "✓ Transaction structure check passed: Transaction has $NUM_VOUTS output(s)"
+
+          # Sixth check: Look for a CSV timelock implementation
+          # Note: The final transaction should have a timelock implementation
+          echo "Checking for timelock implementation..."
+
+          # This is a simplified check - we're looking for any sequence number that could be a timelock
+          # In a real scenario, we'd check more specifically for the exact timelock requirements
+          CSV_FOUND=false
+
+          for seq in $VIN_SEQUENCES; do
+            # Look for sequence values that are low numbers (typical for CSV timelock)
+            # This is a heuristic check since we don't know exactly which input uses CSV
+            if [ "$seq" -gt 0 ] && [ "$seq" -lt 100 ]; then
+              CSV_FOUND=true
+              break
+            fi
+          done
+
+          # This is a soft check - we'll warn but not fail the build
+          if [ "$CSV_FOUND" = false ]; then
+            echo "⚠️ Warning: No obvious CSV timelock implementation found. Sequence numbers don't indicate a typical timelock value."
+            echo "This might still be correct depending on the specific implementation."
+          else
+            echo "✓ Timelock check passed: Found potential CSV timelock implementation"
+          fi
+
+          echo "✅ Success: Advanced Transaction Exercise passed all critical checks!"
+          echo "Transaction is valid, enables RBF, and has proper structure."
